@@ -91,10 +91,9 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
-
-    struct list_elem sleep_elem;
-    int64_t wake_up_time;
+    struct list_elem elem;              /* Ready List element. */
+    struct list_elem sleep_elem;       /* Sleep List element*/
+    int64_t wake_up_time;             /* the global tick to wake up on*/
 
 
 #ifdef USERPROG
@@ -146,4 +145,6 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 bool sleep_less_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED);
+bool priority_more_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED);
+
 #endif /* threads/thread.h */
