@@ -28,6 +28,9 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/*list of threads in that called timer_sleep*/
+static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -92,6 +95,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init(&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -240,6 +244,37 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+}
+/*put current thread in sleep list and blocks it*/
+void thread_sleep(int64_t wake_up_tick){
+
+  enum intr_level old_level;
+
+  struct thread *current = thread_current();
+  old_level=intr_disable();
+  current->wake_up_time=wake_up_tick;
+  list_insert_ordered(&sleep_list,&current->sleep_elem,&sleep_less_comparator,NULL);
+  thread_block();
+  intr_set_level(old_level);
+
+}
+
+/*loop over threads in sleep list till you find 
+  a thread that you can't wake up*/
+void threads_wakeup(int64_t ticks){
+  struct list_elem* front ;
+  struct thread *sleeper;
+  while(!list_empty(&sleep_list))
+      {
+        front = list_front(&sleep_list);
+        sleeper = list_entry(front,struct thread,sleep_elem);
+        if (sleeper->wake_up_time > ticks)
+        {
+          break;
+        }
+        list_pop_front(&sleep_list);
+        thread_unblock(sleeper);
+      }
 }
 
 /* Returns the name of the running thread. */
@@ -578,6 +613,15 @@ allocate_tid (void)
 
   return tid;
 }
+
+/*comparators for oredered lists*/
+bool sleep_less_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED){
+  struct thread *thread_a = list_entry(a,struct thread,elem);
+  struct thread *thread_b = list_entry(b,struct thread,elem);
+  return thread_a->wake_up_time < thread_b->wake_up_time;
+}
+
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
