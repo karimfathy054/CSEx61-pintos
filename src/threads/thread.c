@@ -249,11 +249,10 @@ thread_unblock (struct thread *t)
 void thread_sleep(int64_t wake_up_tick){
 
   enum intr_level old_level;
-
-  struct thread *current = thread_current();
   old_level=intr_disable();
+  struct thread *current = thread_current();
   current->wake_up_time=wake_up_tick;
-  list_insert_ordered(&sleep_list,&current->sleep_elem,&sleep_less_comparator,NULL);
+  list_insert_ordered(&sleep_list,&current->elem,&sleep_less_comparator,NULL);
   thread_block();
   intr_set_level(old_level);
 
@@ -264,10 +263,12 @@ void thread_sleep(int64_t wake_up_tick){
 void threads_wakeup(int64_t ticks){
   struct list_elem* front ;
   struct thread *sleeper;
+
+  ASSERT(intr_get_level() == INTR_OFF);
   while(!list_empty(&sleep_list))
       {
         front = list_front(&sleep_list);
-        sleeper = list_entry(front,struct thread,sleep_elem);
+        sleeper = list_entry(front,struct thread,elem);
         if (sleeper->wake_up_time > ticks)
         {
           break;

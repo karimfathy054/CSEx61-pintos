@@ -92,7 +92,6 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* Ready List element. */
-    struct list_elem sleep_elem;       /* Sleep List element*/
     int64_t wake_up_time;             /* the global tick to wake up on*/
 
 
