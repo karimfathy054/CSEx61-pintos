@@ -204,6 +204,10 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  struct thread *current = thread_current();
+  int current_thread_priority = current->priority;
+  if(current_thread_priority<t->priority)
+    thread_yield();
 
   return tid;
 }
@@ -241,7 +245,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem,&priority_more_comparator,NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -344,7 +348,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem,&priority_more_comparator,NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -371,7 +375,12 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *current = thread_current ();
+  current->priority = new_priority;
+  struct list_elem *front = list_front(&ready_list);
+  int max_priority = list_entry(front,struct thread,elem)->priority;
+  if(new_priority<max_priority)
+    thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -620,6 +629,11 @@ bool sleep_less_comparator(const struct list_elem* a,const struct list_elem* b, 
   struct thread *thread_a = list_entry(a,struct thread,elem);
   struct thread *thread_b = list_entry(b,struct thread,elem);
   return thread_a->wake_up_time < thread_b->wake_up_time;
+}
+bool priority_more_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED){
+  struct thread *thread_a = list_entry(a,struct thread,elem);
+  struct thread *thread_b = list_entry(b,struct thread,elem);
+  return thread_a->priority > thread_b->priority;
 }
 
 
