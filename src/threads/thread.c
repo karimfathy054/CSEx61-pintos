@@ -377,6 +377,9 @@ thread_set_priority (int new_priority)
 {
   struct thread *current = thread_current ();
   current->priority = new_priority;
+  
+  if(list_empty(&ready_list))
+    return;
   struct list_elem *front = list_front(&ready_list);
   int max_priority = list_entry(front,struct thread,elem)->priority;
   if(new_priority<max_priority)

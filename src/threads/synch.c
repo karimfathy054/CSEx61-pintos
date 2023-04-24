@@ -68,7 +68,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem,&priority_more_comparator,NULL);
       thread_block ();
     }
   sema->value--;
@@ -251,6 +251,7 @@ struct semaphore_elem
   {
     struct list_elem elem;              /* List element. */
     struct semaphore semaphore;         /* This semaphore. */
+    int priority;
   };
 
 /* Initializes condition variable COND.  A condition variable
@@ -295,7 +296,8 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  waiter.priority = thread_current()->priority;
+  list_insert_ordered (&cond->waiters, &waiter.elem,&sema_elem_priority_more_comparator,NULL);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -336,3 +338,10 @@ cond_broadcast (struct condition *cond, struct lock *lock)
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
 }
+
+bool sema_elem_priority_more_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED){
+  struct semaphore_elem *semaphore_elem_a = list_entry(a,struct semaphore_elem,elem);
+  struct semaphore_elem *semaphore_elem_b = list_entry(b,struct semaphore_elem,elem);
+  return semaphore_elem_a->priority > semaphore_elem_b->priority;
+}
+
