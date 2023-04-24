@@ -390,6 +390,27 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
+/* puts the current thread in the donors list of the 
+   recipient thread and change its priority*/
+void thread_send_donation (struct thread *donor,struct thread *recipient){
+  list_push_back(recipient->donations,&donor->d_elem);
+  int max_donation = list_entry(list_max(recipient->donations,&priority_more_comparator,NULL),struct thread , d_elem);
+  if(recipient->priority< max_donation){
+    recipient->priority = max_donation;
+    //check to see if you sould pass on the new priority 
+    /*1. recipient is now a donor
+      2. heir is now a recipient
+      3. remove the recipient from the lis t of the heir donors list
+      4. make the recipient redonate to heir 
+      */
+    struct lock *lck = recipient->wait_on_lock;
+    struct thread *heir = lck->holder;
+    // list_remove()
+  }  
+
+}
+
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) 
@@ -507,6 +528,9 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->unboosted_priority = priority;
+  lock_init(t->wait_on_lock);
+  list_init(t->donations);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
