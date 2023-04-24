@@ -129,6 +129,10 @@ void thread_unblock (struct thread *);
 void thread_sleep(int64_t wake_up_tick);
 void threads_wakeup(int64_t ticks);
 
+void thread_send_donation (struct thread *donor,struct thread *recipient);
+
+
+
 struct thread *thread_current (void);
 tid_t thread_tid (void);
 const char *thread_name (void);
