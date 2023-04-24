@@ -201,7 +201,7 @@ lock_acquire (struct lock *lock)
     struct thread *current = thread_current();
     current->wait_on_lock = lock;
     struct thread *lock_holder = lock->holder;
-    thread_send_donation(current,lock_holder);
+    // thread_send_donation(current,lock_holder);
   }
   
   sema_down (&lock->semaphore);
