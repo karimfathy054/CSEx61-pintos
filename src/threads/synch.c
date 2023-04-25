@@ -179,7 +179,9 @@ lock_init (struct lock *lock)
 
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
+  lock->lock_priority =0;
 }
+
 
 /* Acquires LOCK, sleeping until it becomes available if
    necessary.  The lock must not already be held by the current
@@ -196,18 +198,29 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  // if the lock is taken offer to donate to the holder
-  if (lock->holder != NULL){
-    struct thread *current = thread_current();
-    current->wait_on_lock = lock;
-    struct thread *lock_holder = lock->holder;
-    thread_send_donation(current,lock_holder);
+  struct thread *current = thread_current();
+  struct thread *lockHolder = lock->holder;
+  struct lock *lock_ptr = lock;
+
+  current->wait_on_lock=lock;
+  if(lock->holder != NULL){
+
+    while (lockHolder->priority < current->priority){
+      thread_priority_change(lockHolder,current->priority);
+      lock_ptr->lock_priority = lock_ptr->holder->priority;
+      //update priorities
+      lock_ptr= lockHolder->wait_on_lock;
+      if(lock_ptr==NULL){break;}
+      lockHolder= lock_ptr->holder;
+    }
+    lock->lock_priority=(lock->holder!=NULL)? lock->holder->priority:current->priority;
   }
-  
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
-  //lock is acquired from the previous owner
+
   lock->holder->wait_on_lock = NULL;
+  list_insert_ordered(&lock->holder->acquired_locks,&lock->lock_elem,&lock_priority_more_comparator,NULL);
+  //lock is acquired from the previous owner
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -240,9 +253,17 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
+  struct thread *current = thread_current();
+  
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  list_remove(&lock->lock_elem);
+  if(list_empty(&current->acquired_locks)){
+    thread_priority_change(current,current->original_priority);
+  }else{
+    thread_priority_change(current,list_entry(list_front(&current->acquired_locks),struct lock,lock_elem)->lock_priority);
+  }
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -355,3 +376,8 @@ bool sema_elem_priority_more_comparator(const struct list_elem* a,const struct l
   return semaphore_elem_a->priority > semaphore_elem_b->priority;
 }
 
+bool lock_priority_more_comparator(const struct list_elem *a,const struct list_elem *b,void* aux UNUSED){
+  struct lock *lock_a = list_entry(a,struct lock,lock_elem);
+  struct lock *lock_b = list_entry(b,struct lock,lock_elem);
+  return lock_a->lock_priority > lock_b->lock_priority;
+}

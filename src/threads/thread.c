@@ -376,7 +376,10 @@ void
 thread_set_priority (int new_priority) 
 {
   struct thread *current = thread_current ();
-  current->priority = new_priority;
+  if((current->priority=current->original_priority) || (current->priority<new_priority)){
+    current->priority=new_priority;
+  }
+  current->original_priority = new_priority;
   
   if(list_empty(&ready_list))
     return;
@@ -393,19 +396,31 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-void thread_send_donation (struct thread *donor,struct thread *recipient){
-  list_insert_ordered(&recipient->donations,&donor->d_elem,&priority_more_comparator,NULL);
-  int max_donation_priority = list_entry(list_front(&recipient->donations),struct thread,d_elem)->priority;
-  if(recipient->priority<max_donation_priority){
-    recipient->priority = max_donation_priority;
-    struct lock *lock = recipient->wait_on_lock;
-    if(lock == NULL){return;}
-    struct thread *inheritor = lock->holder;
-    list_remove(&recipient->d_elem);
-    thread_send_donation(recipient,inheritor);
-  }
+void thread_priority_change(struct thread* thread,int new_priority){
+  thread->priority=new_priority;
+
+  if(list_empty(&ready_list))
+    return;
+  struct list_elem *front = list_front(&ready_list);
+  int max_priority = list_entry(front,struct thread,elem)->priority;
+  if(new_priority<max_priority)
+    thread_yield();
 }
 
+// void thread_send_donation (struct thread *donor,struct thread *recipient){
+//   list_insert_ordered(&recipient->acquired_locks,&donor->d_elem,&donation_more_comparator,NULL);
+//   int max_donation_priority = list_entry(list_front(&recipient->acquired_locks),struct thread,d_elem)->priority;
+//   if(recipient->priority<max_donation_priority){
+//     recipient->priority = max_donation_priority;
+//     //pass on priority to inheritor
+//     struct lock *lock = recipient->wait_on_lock;
+//     if(lock == NULL){return;}
+//     struct thread *inheritor = lock->holder;
+//     if(inheritor == NULL){return;}
+//     list_remove(&recipient->d_elem);
+//     thread_send_donation(recipient,inheritor);
+//   }
+// }
 
 /* Sets the current thread's nice value to NICE. */
 void
@@ -527,7 +542,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->original_priority = priority;
  
   t->wait_on_lock=NULL;
-  list_init(&t->donations);
+  list_init(&t->acquired_locks);
 
   t->magic = THREAD_MAGIC;
 
@@ -657,6 +672,11 @@ bool priority_more_comparator(const struct list_elem* a,const struct list_elem* 
   struct thread *thread_b = list_entry(b,struct thread,elem);
   return thread_a->priority > thread_b->priority;
 }
+// bool donation_more_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED){
+//   struct thread *thread_a = list_entry(a,struct thread,d_elem);
+//   struct thread *thread_b = list_entry(b,struct thread,d_elem);
+//   return thread_a->priority > thread_b->priority;
+// }
 
 
 

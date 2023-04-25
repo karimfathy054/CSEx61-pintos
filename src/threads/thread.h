@@ -96,8 +96,8 @@ struct thread
     int64_t wake_up_time;             /* the global tick to wake up on*/
     
     struct lock *wait_on_lock;         /*pointer to thee lock that block the thread*/
-    struct list donations;       /*list of all donors*/
-    struct list_elem d_elem;        /*list element for donors list*/
+    struct list acquired_locks;       /*list of all donors*/
+   //  struct list_elem d_elem;        /*list element for donors list*/
 
 
 #ifdef USERPROG
@@ -129,7 +129,7 @@ void thread_unblock (struct thread *);
 void thread_sleep(int64_t wake_up_tick);
 void threads_wakeup(int64_t ticks);
 
-void thread_send_donation (struct thread *donor,struct thread *recipient);
+// void thread_send_donation (struct thread *donor,struct thread *recipient);
 
 
 
@@ -146,6 +146,8 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_priority_change(struct thread* curr,int new_priority);
+
 
 int thread_get_nice (void);
 void thread_set_nice (int);
@@ -154,5 +156,5 @@ int thread_get_load_avg (void);
 
 bool sleep_less_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED);
 bool priority_more_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED);
-
+// bool donation_more_comparator(const struct list_elem* a,const struct list_elem* b, void* aux UNUSED);
 #endif /* threads/thread.h */
