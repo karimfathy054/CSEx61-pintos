@@ -95,9 +95,9 @@ struct thread
     struct list_elem elem;              /* Ready List element. */
     int64_t wake_up_time;             /* the global tick to wake up on*/
     
-    struct lock *wait_on_lock;
-    struct list *donations;
-    struct list_elem d_elem;
+    struct lock *wait_on_lock;         /*pointer to thee lock that block the thread*/
+    struct list donations;       /*list of all donors*/
+    struct list_elem d_elem;        /*list element for donors list*/
 
 
 #ifdef USERPROG

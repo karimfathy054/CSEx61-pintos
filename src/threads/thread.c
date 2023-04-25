@@ -393,17 +393,18 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-// void thread_send_donation (struct thread *donor,struct thread *recipient){
-//   list_insert_ordered(recipient->donations,&donor->d_elem,&priority_more_comparator,NULL);
-//   int max_donation_priority = list_entry(list_front(recipient->donations),struct thread,d_elem)->priority;
-//   if(recipient->priority<max_donation_priority){
-//     recipient->priority = max_donation_priority;
-//     struct lock *lock = recipient->wait_on_lock;
-//     struct thread *inheritor = lock->holder;
-//     list_remove(&recipient->d_elem);
-//     thread_send_donation(recipient,inheritor);
-//   }
-// }
+void thread_send_donation (struct thread *donor,struct thread *recipient){
+  list_insert_ordered(&recipient->donations,&donor->d_elem,&priority_more_comparator,NULL);
+  int max_donation_priority = list_entry(list_front(&recipient->donations),struct thread,d_elem)->priority;
+  if(recipient->priority<max_donation_priority){
+    recipient->priority = max_donation_priority;
+    struct lock *lock = recipient->wait_on_lock;
+    if(lock == NULL){return;}
+    struct thread *inheritor = lock->holder;
+    list_remove(&recipient->d_elem);
+    thread_send_donation(recipient,inheritor);
+  }
+}
 
 
 /* Sets the current thread's nice value to NICE. */
@@ -524,9 +525,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
- //memset if error
  
-  lock_init(&t->wait_on_lock);
+  t->wait_on_lock=NULL;
   list_init(&t->donations);
 
   t->magic = THREAD_MAGIC;
