@@ -58,7 +58,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /*load_avg for advanced scheduler*/
-static real load_avg = 0;
+static real load_avg;
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -105,6 +105,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  /*set load average at start*/
+  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -211,9 +213,9 @@ thread_create (const char *name, int priority,
   if(thread_mlfqs){
     struct thread *current = thread_current();
     thread_calculate_recent_cpu(t,NULL);
-    thread_calculate_priority_for_thread(t,NULL);
+    thread_calculate_priority(t,NULL);
     thread_calculate_recent_cpu(current,NULL);
-    thread_calculate_priority_for_thread(current,NULL);
+    thread_calculate_priority(current,NULL);
   }
   struct thread *current = thread_current();
   int current_thread_priority = current->priority;
@@ -421,8 +423,11 @@ void thread_priority_change(struct thread* thread,int new_priority){
 }
 /*increments recent cpu for running thread every tick*/
 void thread_increment_recent_cpu(void){
+  enum intr_level old_level;
+  old_level=intr_disable();
   struct thread* current = thread_current();
   current->recent_cpu=real_add_real_and_int(current->recent_cpu,1);
+  intr_set_level(old_level);
 }
 /*calculates load avg for */
 void thread_calculate_load_avg(void){
@@ -437,9 +442,14 @@ void thread_calculate_load_avg(void){
 void thread_calculate_recent_cpu(struct thread *thread,void *aux UNUSED){
   ASSERT(is_thread(thread));
   if(thread == idle_thread){return;}
+  enum intr_level old_level;
+  old_level=intr_disable();
+
   real temp = real_multiply_real_by_int(load_avg,2);
   real decay = real_divide(temp,real_add_real_and_int(temp,1));
   thread->recent_cpu = real_add_real_and_int(real_multiply(decay,thread->recent_cpu),thread->nice);
+  
+  intr_set_level(old_level);
 }
 /*calculate the priority for all threads each second*/
 void thread_calculate_priority(struct thread *thread,void *aux UNUSED){

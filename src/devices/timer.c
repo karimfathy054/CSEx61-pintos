@@ -184,21 +184,23 @@ timer_interrupt (struct intr_frame *args UNUSED)
   count_one_second++;
   thread_tick ();
   threads_wakeup(timer_ticks());
-  if(thread_mlfqs){
+  if(thread_mlfqs){//every tick
+    bool already_calculated_priority=false;
     /*1.increment recent cpu for running thread every tick
       2.update priority for all threads every for ticks
       3.update recent cpu for all threads every second*/
-    increment_recent_cpu();
-    if(count_4_ticks==4){
+    thread_increment_recent_cpu();
+    if(count_4_ticks==4){ //every 4 ticks
+      already_calculated_priority = true;
       count_4_ticks=0;
       calculate_priority_for_all_threads();
     }
-    if(count_one_second==TIMER_FREQ){
+    if(count_one_second==TIMER_FREQ){ //every second
       count_one_second=0;
       thread_calculate_load_avg();
       thread_foreach(&thread_calculate_recent_cpu,NULL);
-      calculate_priority_for_all_threads();
-      
+      if(!already_calculated_priority)
+        calculate_priority_for_all_threads();
     }
   }  
 }
