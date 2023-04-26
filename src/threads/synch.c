@@ -198,7 +198,8 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  struct thread *current = thread_current();
+  if(!thread_mlfqs)
+  {struct thread *current = thread_current();
   struct thread *lockHolder = lock->holder;
   struct lock *lock_ptr = lock;
 
@@ -214,13 +215,13 @@ lock_acquire (struct lock *lock)
       lockHolder= lock_ptr->holder;
     }
     lock->lock_priority=(lock->holder!=NULL)? lock->holder->priority:current->priority;
-  }
+  }}
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 
-  lock->holder->wait_on_lock = NULL;
-  list_insert_ordered(&lock->holder->acquired_locks,&lock->lock_elem,&lock_priority_more_comparator,NULL);
-  //lock is acquired from the previous owner
+  if(!thread_mlfqs)
+  {lock->holder->wait_on_lock = NULL;
+  list_insert_ordered(&lock->holder->acquired_locks,&lock->lock_elem,&lock_priority_more_comparator,NULL);}
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -258,12 +259,13 @@ lock_release (struct lock *lock)
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 
-  list_remove(&lock->lock_elem);
+  if(!thread_mlfqs)
+  {list_remove(&lock->lock_elem);
   if(list_empty(&current->acquired_locks)){
     thread_priority_change(current,current->original_priority);
   }else{
     thread_priority_change(current,list_entry(list_front(&current->acquired_locks),struct lock,lock_elem)->lock_priority);
-  }
+  }}
 }
 
 /* Returns true if the current thread holds LOCK, false

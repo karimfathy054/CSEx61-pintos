@@ -57,6 +57,9 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
+/*load_avg for advanced scheduler*/
+static real load_avg = 0;
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -204,6 +207,14 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  
+  if(thread_mlfqs){
+    struct thread *current = thread_current();
+    thread_calculate_recent_cpu(t,NULL);
+    thread_calculate_priority_for_thread(t,NULL);
+    thread_calculate_recent_cpu(current,NULL);
+    thread_calculate_priority_for_thread(current,NULL);
+  }
   struct thread *current = thread_current();
   int current_thread_priority = current->priority;
   if(current_thread_priority<t->priority)
@@ -375,7 +386,9 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  if(thread_mlfqs==true){return;}
   struct thread *current = thread_current ();
+
   if((current->priority==current->original_priority) || (current->priority < new_priority)){
     current->priority=new_priority;
   }
@@ -406,51 +419,76 @@ void thread_priority_change(struct thread* thread,int new_priority){
   if(new_priority<max_priority)
     thread_yield();
 }
-
-// void thread_send_donation (struct thread *donor,struct thread *recipient){
-//   list_insert_ordered(&recipient->acquired_locks,&donor->d_elem,&donation_more_comparator,NULL);
-//   int max_donation_priority = list_entry(list_front(&recipient->acquired_locks),struct thread,d_elem)->priority;
-//   if(recipient->priority<max_donation_priority){
-//     recipient->priority = max_donation_priority;
-//     //pass on priority to inheritor
-//     struct lock *lock = recipient->wait_on_lock;
-//     if(lock == NULL){return;}
-//     struct thread *inheritor = lock->holder;
-//     if(inheritor == NULL){return;}
-//     list_remove(&recipient->d_elem);
-//     thread_send_donation(recipient,inheritor);
-//   }
-// }
+/*increments recent cpu for running thread every tick*/
+void thread_increment_recent_cpu(void){
+  struct thread* current = thread_current();
+  current->recent_cpu=real_add_real_and_int(current->recent_cpu,1);
+}
+/*calculates load avg for */
+void thread_calculate_load_avg(void){
+  int ready_threads = list_size(&ready_list);
+  if(thread_current() != idle_thread){
+    ready_threads++;
+  }
+  load_avg = real_divide_real_by_int(real_multiply_real_by_int(load_avg,59),60) + 
+             real_divide_real_by_int(convert_int_to_real(ready_threads),60);
+}
+/*calculates recent cpu for a thread each second*/
+void thread_calculate_recent_cpu(struct thread *thread,void *aux UNUSED){
+  ASSERT(is_thread(thread));
+  if(thread == idle_thread){return;}
+  real temp = real_multiply_real_by_int(load_avg,2);
+  real decay = real_divide(temp,real_add_real_and_int(temp,1));
+  thread->recent_cpu = real_add_real_and_int(real_multiply(decay,thread->recent_cpu),thread->nice);
+}
+/*calculate the priority for all threads each second*/
+void thread_calculate_priority(struct thread *thread,void *aux UNUSED){
+  ASSERT(is_thread(&thread));
+  if(thread == idle){return;}
+  thread->priority= PRI_MAX - real_round(real_subtract_int_from_real(real_divide_real_by_int(thread->recent_cpu,4),(thread->nice*2)));
+  if(thread->priority<PRI_MIN){
+    thread->priority=PRI_MIN;
+  }else if(thread->priority>PRI_MAX){
+    thread->priority=PRI_MAX;
+  }
+}
+void calculate_priority_for_all_threads(void){
+  thread_foreach(&thread_calculate_priority,NULL);
+  if(list_empty(&ready_list)){return;}
+  list_sort(&ready_list,priority_more_comparator,NULL);
+}
 
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  ASSERT((nice>= -20) && (nice <= 20)){
+
+  }
+  struct thread *current = thread_current();
+  current->nice=nice;
+  //make sure to rescedule
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return real_round(real_multiply_real_by_int(load_avg,100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return real_round(real_multiply_real_by_int(thread_current()->recent_cpu,100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -544,6 +582,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->wait_on_lock=NULL;
   list_init(&t->acquired_locks);
 
+  if(thread_mlfqs){
+    if(t == initial_thread)
+    {t->nice = 0;
+    t->recent_cpu = 0;}
+    else{
+      struct thread* current = thread_current();
+      t->nice=current->nice;
+      t->recent_cpu=current->recent_cpu;
+    }
+  }
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();

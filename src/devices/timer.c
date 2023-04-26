@@ -21,6 +21,10 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+/*ticks count to be reseted every 4 ticks*/
+static int count_4_ticks=0;
+/*ticks count to be reseted every 8 ticks*/
+static int count_one_second=0;
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -170,14 +174,35 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  count_4_ticks++;
+  count_one_second++;
   thread_tick ();
   threads_wakeup(timer_ticks());
+  if(thread_mlfqs){
+    /*1.increment recent cpu for running thread every tick
+      2.update priority for all threads every for ticks
+      3.update recent cpu for all threads every second*/
+    increment_recent_cpu();
+    if(count_4_ticks==4){
+      count_4_ticks=0;
+      calculate_priority_for_all_threads();
+    }
+    if(count_one_second==TIMER_FREQ){
+      count_one_second=0;
+      thread_calculate_load_avg();
+      thread_foreach(&thread_calculate_recent_cpu,NULL);
+      calculate_priority_for_all_threads();
+      
+    }
+  }  
 }
+
 
 /* Returns true if LOOPS iterations waits for more than one timer
    tick, otherwise false. */
