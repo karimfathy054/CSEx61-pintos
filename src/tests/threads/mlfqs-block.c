@@ -24,7 +24,7 @@ test_mlfqs_block (void)
 {
   int64_t start_time;
   struct lock lock;
-  
+  thread_mlfqs=true;
   ASSERT (thread_mlfqs);
 
   msg ("Main thread acquiring lock.");

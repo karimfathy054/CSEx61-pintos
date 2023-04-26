@@ -435,6 +435,7 @@ void thread_calculate_load_avg(void){
   if(thread_current() != idle_thread){
     ready_threads++;
   }
+  //load_avg = 59/60 load_avg + 1/60 ready_threads;
   load_avg = real_divide_real_by_int(real_multiply_real_by_int(load_avg,59),60) + 
              real_divide_real_by_int(convert_int_to_real(ready_threads),60);
 }
@@ -453,8 +454,8 @@ void thread_calculate_recent_cpu(struct thread *thread,void *aux UNUSED){
 }
 /*calculate the priority for all threads each second*/
 void thread_calculate_priority(struct thread *thread,void *aux UNUSED){
-  ASSERT(is_thread(&thread));
-  if(thread == idle){return;}
+  ASSERT(is_thread(thread));
+  if(thread == idle_thread){return;}
   thread->priority= PRI_MAX - real_round(real_subtract_int_from_real(real_divide_real_by_int(thread->recent_cpu,4),(thread->nice*2)));
   if(thread->priority<PRI_MIN){
     thread->priority=PRI_MIN;
@@ -472,12 +473,21 @@ void calculate_priority_for_all_threads(void){
 void
 thread_set_nice (int nice UNUSED) 
 {
-  ASSERT((nice>= -20) && (nice <= 20)){
-
-  }
-  struct thread *current = thread_current();
+  ASSERT((nice>= -20) && (nice <= 20));
+  enum intr_level old_level;
+  struct thread *current;
+  old_level=intr_disable();
+  current = thread_current();
   current->nice=nice;
+  thread_calculate_priority(current,NULL);
+  intr_set_level(old_level);
   //make sure to rescedule
+  if(list_empty(&ready_list))
+    return;
+  struct list_elem *front = list_front(&ready_list);
+  int max_priority = list_entry(front,struct thread,elem)->priority;
+  if(current->priority<max_priority)
+    thread_yield();
 }
 
 /* Returns the current thread's nice value. */
@@ -491,7 +501,7 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  return real_round(real_multiply_real_by_int(load_avg,100));
+  return real_truncate(real_multiply_real_by_int(load_avg,100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */

@@ -69,6 +69,7 @@ test_mlfqs_fair (int thread_cnt, int nice_min, int nice_step)
   int64_t start_time;
   int nice;
   int i;
+  thread_mlfqs=true;
 
   ASSERT (thread_mlfqs);
   ASSERT (thread_cnt <= MAX_THREAD_CNT);

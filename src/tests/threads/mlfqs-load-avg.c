@@ -126,7 +126,7 @@ void
 test_mlfqs_load_avg (void) 
 {
   int i;
-  
+  thread_mlfqs=true;
   ASSERT (thread_mlfqs);
 
   start_time = timer_ticks ();
