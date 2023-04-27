@@ -437,6 +437,7 @@ void thread_increment_recent_cpu(void){
   enum intr_level old_level;
   old_level=intr_disable();
   struct thread* current = thread_current();
+  if(current!= idle_thread)
   current->recent_cpu=real_add_real_and_int(current->recent_cpu,1);
   intr_set_level(old_level);
 }
@@ -621,9 +622,11 @@ init_thread (struct thread *t, const char *name, int priority)
     {t->nice = 0;
     t->recent_cpu = 0;}
     else{
-      struct thread* current = thread_current();
-      t->nice=current->nice;
-      t->recent_cpu=current->recent_cpu;
+      // struct thread* current = thread_current();
+      // t->nice=current->nice;
+      // t->recent_cpu=current->recent_cpu;
+      t->nice = 0;
+      t->recent_cpu = 0;
     }
   }
   t->magic = THREAD_MAGIC;
