@@ -100,13 +100,20 @@ thread_init (void)
   list_init (&all_list);
   list_init(&sleep_list);
 
+  /*set load average at start*/
+  if(thread_mlfqs){
+    load_avg = 0;
+    struct thread *current = running_thread();
+    current->nice=0;
+    current->recent_cpu=0;
+  }
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  /*set load average at start*/
-  load_avg = 0;
+  
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -118,6 +125,11 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
+
+  if(thread_mlfqs){
+    load_avg = 0;
+    
+  }
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -444,10 +456,10 @@ void thread_calculate_recent_cpu(struct thread *thread,void *aux UNUSED){
   ASSERT(is_thread(thread));
   if(thread == idle_thread){return;}
   enum intr_level old_level;
-  old_level=intr_disable();
 
   real temp = real_multiply_real_by_int(load_avg,2);
   real decay = real_divide(temp,real_add_real_and_int(temp,1));
+  old_level=intr_disable();
   thread->recent_cpu = real_add_real_and_int(real_multiply(decay,thread->recent_cpu),thread->nice);
   
   intr_set_level(old_level);
@@ -456,7 +468,8 @@ void thread_calculate_recent_cpu(struct thread *thread,void *aux UNUSED){
 void thread_calculate_priority(struct thread *thread,void *aux UNUSED){
   ASSERT(is_thread(thread));
   if(thread == idle_thread){return;}
-  thread->priority= PRI_MAX - real_round(real_subtract_int_from_real(real_divide_real_by_int(thread->recent_cpu,4),(thread->nice*2)));
+  // thread->priority= PRI_MAX - real_truncate(real_subtract(real_divide_real_by_int(thread->recent_cpu,4),convert_int_to_real((thread->nice)*2)));
+  thread->priority = PRI_MAX - real_truncate(real_subtract(real_divide(thread->recent_cpu,4),convert_int_to_real((thread->nice)*2)));
   if(thread->priority<PRI_MIN){
     thread->priority=PRI_MIN;
   }else if(thread->priority>PRI_MAX){
@@ -486,8 +499,10 @@ thread_set_nice (int nice UNUSED)
     return;
   struct list_elem *front = list_front(&ready_list);
   int max_priority = list_entry(front,struct thread,elem)->priority;
-  if(current->priority<max_priority)
+  if(current->priority<max_priority){
     thread_yield();
+  }
+  
 }
 
 /* Returns the current thread's nice value. */
@@ -508,7 +523,7 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  return real_round(real_multiply_real_by_int(thread_current()->recent_cpu,100));
+  return real_truncate(real_multiply_real_by_int(thread_current()->recent_cpu,100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

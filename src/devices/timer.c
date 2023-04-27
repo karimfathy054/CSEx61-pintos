@@ -22,9 +22,9 @@
 static int64_t ticks;
 
 /*ticks count to be reseted every 4 ticks*/
-static int count_4_ticks=0;
+static int count_4_ticks;
 /*ticks count to be reseted every 8 ticks*/
-static int count_one_second=0;
+static int count_one_second;
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -42,6 +42,8 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  count_4_ticks =0;
+  count_one_second =0 ;
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -184,18 +186,19 @@ timer_interrupt (struct intr_frame *args UNUSED)
   count_one_second++;
   thread_tick ();
   threads_wakeup(timer_ticks());
+
   if(thread_mlfqs){//every tick
     bool already_calculated_priority=false;
     /*1.increment recent cpu for running thread every tick
       2.update priority for all threads every for ticks
       3.update recent cpu for all threads every second*/
     thread_increment_recent_cpu();
-    if(count_4_ticks==4){ //every 4 ticks
+    if((timer_ticks()%4)==0){ //every 4 ticks
       already_calculated_priority = true;
       count_4_ticks=0;
       calculate_priority_for_all_threads();
     }
-    if(count_one_second==TIMER_FREQ){ //every second
+    if((timer_ticks()%TIMER_FREQ)==0){ //every second
       count_one_second=0;
       thread_calculate_load_avg();
       thread_foreach(&thread_calculate_recent_cpu,NULL);
