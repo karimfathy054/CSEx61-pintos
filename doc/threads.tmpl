@@ -30,27 +30,99 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct thread
+  {
+    /* Owned by thread.c. */
+    tid_t tid;                          /* Thread identifier. */
+    enum thread_status status;          /* Thread state. */
+    char name[16];                      /* Name (for debugging purposes). */
+    uint8_t *stack;                     /* Saved stack pointer. */
+    int priority;                       /* Priority. */
+    int original_priority;         ------>a struct member to keep the value of the original priority that it had when it was created
+    struct list_elem allelem;           /* List element for all threads list. */
+
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* Ready List element. */
+    int64_t wake_up_time;             -----> a struct member to keep the value of the tick that the thread should wake up on
+    
+    struct lock *wait_on_lock;        -----> a pointer to the lock that the threads wants to acquire but is blocked by it
+    struct list acquired_locks;       -----> a list member in the thread struct to track down all the locks that the thread has acquired
+    int nice;           --------> NICE member is added to track down the value of nice for the thread when using advanced schedular
+    real recent_cpu;    --------> RECENT_CPU is add to track down the value of recent cpu time that the thread has taken to be used in advanced schedular
+
+#ifdef USERPROG
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
+#endif
+
+    /* Owned by thread.c. */
+    unsigned magic;                     /* Detects stack overflow. */
+  };
+--------------------------------------------------------------------------
+typedef int real; ------> a type define for a type to be used in fixed point arithmatics
+--------------------------------------------------------------------------
+struct lock 
+  {
+    struct thread *holder;      /* Thread holding lock (for debugging). */
+    struct semaphore semaphore; /* Binary semaphore controlling access. */
+    struct list_elem lock_elem; ------>list element in the struct to be used in lock acquired lists of threads
+    int lock_priority;      --------> a member to keep the value of the priority to donate to the lock holder
+  };
+-----------------------------------------------------------------------------
+struct semaphore_elem 
+  {
+    struct list_elem elem;              /* List element. */
+    struct semaphore semaphore;         /* This semaphore. */
+    int priority;           --------> priority member to help sort semaphores for a certain condition
+  };
+-----------------------------------------------------------------------------
+static struct list sleep_list;  ------> a list in thread.c to keep the threads that are blocked by timer_sleep() call;
+----------------------------------------------------------------------------------
+static real load_avg;      --------------> a global variable in thread.c to keep the value of load_average for advanced schedular
+-----------------------------------------------------------------------------------------
+
+
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+->when timer_sleep (int64_t ticks) is called the function checks if the number of ticks is more than 0 and the time elapsed since the start of the function call is still less than the number of ticks to sleep
+if so, it adds the value of sleep tick and start time of the call and stores that in the sleeping thread's wake_up_time member 
+then insert the sleeping thread in the sleep_list of the system 
+then calles thread_block() function to remove it from ready_list so it can't be resceduled
+
+->the timer interrupt handler calls the function threads_wake_up() that loops over the threads of sleep_list to check if a thread should be awaked if its wake_up_time is less than the current time 
+
+----------------------------------------------------------------------------------------
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
 
+->the threads that are in the sleep_list are inserted in order according to the value of the wake_up_time member of each thread;
+
+----------------------------------------------------------------------------------
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+->interrupts are disabled during the change of the anything in the list of sleep_threads
+----------------------------------------------------------------------------
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+>interrupts are totally disabled during the critical section of timer_sleep to prevent any interrupt from the timer
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
+we chose this design because it was the most time efficient as it stores the sleeping threads in the order of their waking_up_time 
+so the traversal of the list could stop once you find a thread that you can't wake up
+so the worst case for that traversal is O(n)
              PRIORITY SCHEDULING
              ===================
 
@@ -60,20 +132,89 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+in thread.h
+struct thread
+  {
+    .....
+
+    int priority;                       /* Priority. */
+    int original_priority;         ------>a struct member to keep the value of the original priority that it had when it was created
+    
+    ......
+    
+    struct lock *wait_on_lock;        -----> a pointer to the lock that the threads wants to acquire but is blocked by it
+    struct list acquired_locks;       -----> a list member in the thread struct to track down all the locks that the thread has acquired
+
+    .....
+  };
+------------------------------------------------------------------------
+int synch.c
+struct lock 
+  {
+    struct thread *holder;      /* Thread holding lock (for debugging). */
+    struct semaphore semaphore; /* Binary semaphore controlling access. */
+    struct list_elem lock_elem; ------>list element in the struct to be used in lock acquired lists of threads
+    int lock_priority;      --------> a member to keep the value of the priority to donate to the lock holder
+  };
+-----------------------------------------------------------------------
+struct semaphore_elem 
+  {
+    struct list_elem elem;              /* List element. */
+    struct semaphore semaphore;         /* This semaphore. */
+    int priority;           --------> priority member to help sort semaphores for a certain condition
+  };
+----------------------------------------------------------------------------
+
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
+
+    T1     T2 T3     T4 
+     \     /   \     / 
+      \   /     \   / 
+       \ /       \ /    - T1 and T2 are waiting on L1 
+        L1        L2    - T2 and T3 are waiting on L2 
+        |         |    
+        T5        T6    -L1 is held by T5, L2 by T6 
+         \        / 
+          \      / 
+           \    / 
+            \  / 
+             L3         - T5 and T6 are waiting on L3 
+             | 
+             T7         - L3 is held by T7
+each thread keeps a pointer to the lock that it wants to acquire and is blocked by it so it can donate
+forward to the lock owners (T1 and T2 store a pointer to L1)
+
 
 ---- ALGORITHMS ----
 
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
 
+    -> by inserting the threads in the waiting list of each of (lock, semaphore, or condition variable) in order of their Priority
+    as they can't change their own priority as long as they are stuck in blocked state due to that (lock, semaphore, or condition variable)
+    when a (lock_release, sema_up, or condition signal) is called the first thread in that list which is the one with the highest priority gets to be 
+    woken up first
+-----------------------------------------------------------------------------------------------------------
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
+    1. current thread check if the lock is held by another thread first
+    2. if the lock has a holder the current thread compares its priority to the priority of holder to see if he should donate its priority
+    3. if so a loop is initiated with the condition of lock holder priority < current thread priority
+    4. a new priority is set to the lock holder and the lock priority
+    5. if the thread that has recently accepted a donation has a priority more than the priority of the lock that blocks it 
+    5. the pointer of the lock holder is then shifted to the holder of the lock that blocks the thread that has recently accepted a donation and the loop continues with a new lock holder that may or may not accept a donation
+    6. sema_down is then called with the reference of the lock semaphore to block the thread on that lock
+    7. when a thread awakes by sema_up the value of holder member in the lock is changed to the new holder and the lock is inserted in its list of acquired locks
+------------------------------------------------------------------------------------------------------
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+    1. the value of holder member in lock struct is changed to NULL and a sema_up() is called to release a new owner for the lock 
+    2. lock is remove from the list of acquired locks list of the previous owner
+    3. if the list of acquired_locks is empty the thread changes its priority to its original_priority and reschedule
+    4. if the list of acquired_locks has elements it checks if it can have a new donation from other locks priorities 
 
 ---- SYNCHRONIZATION ----
 
@@ -81,10 +222,32 @@ FirstName LastName <email@domain.example>
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+    in our implementation thread_set_priority is only used by the running thread to change its own priority
+    so no other external factors could affect on the value of the priority of the thread
+    a potential race condition could happen in the thread_priority_change when a thread 
+    loses its donated priority from the released lock, we need to compare it's original priority
+    to any potential donated priorities and get the max of these priorities.  If, after 
+    we compute the max priority, another thread donates its priority to us, 
+    the just-computed maximum is now stale, and we incorrectly set our 
+    priority to this stale value. We avoid this race condition by disabling 
+    interrupts. If we wanted to use a lock correctly, we would need to 
+    introduce the lock around all code that interacts with variables used 
+    in thread_priority_change. However, the implementation of locks modifies 
+    the list of locks that a thread holds. This may result in deadlock  
+    because the lock code would call itself in some cases. 
+
+
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+    we thought at first to keep a list of all threads that want to acquire the lock
+    and are willing to offer a donation even if their priority is smaller than 
+    the lock holder's priority,that could cause some sort of overflow so we  avoided that 
+    and decided to keep the locks that  the thread has successfully acquired
+    
 
               ADVANCED SCHEDULER
               ==================
@@ -94,6 +257,9 @@ FirstName LastName <email@domain.example>
 >> C1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+
+typedef int real; ------> a type define for a type to be used in fixed point arithmatics
+
 
 ---- ALGORITHMS ----
 

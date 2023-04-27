@@ -128,7 +128,6 @@ thread_start (void)
 
   if(thread_mlfqs){
     load_avg = 0;
-    
   }
 
   /* Start preemptive thread scheduling. */
@@ -400,14 +399,15 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  if(thread_mlfqs==true){return;}
+  enum intr_level old_level;
   struct thread *current = thread_current ();
-
+  if(thread_mlfqs==true){return;}
+  old_level = intr_disable();
   if((current->priority==current->original_priority) || (current->priority < new_priority)){
     current->priority=new_priority;
   }
   current->original_priority = new_priority;
-  
+  intr_set_level(old_level);
   if(list_empty(&ready_list))
     return;
   struct list_elem *front = list_front(&ready_list);
@@ -428,9 +428,8 @@ void thread_priority_change(struct thread* thread,int new_priority){
 
   if(list_empty(&ready_list))
     return;
-  struct list_elem *front = list_front(&ready_list);
-  int max_priority = list_entry(front,struct thread,elem)->priority;
-  if(new_priority<max_priority)
+  int max_priority = list_entry(list_max(&ready_list,priority_more_comparator,NULL),struct thread,elem)->priority;
+  if(thread_current()->priority<max_priority)
     thread_yield();
 }
 /*increments recent cpu for running thread every tick*/
